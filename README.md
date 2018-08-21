@@ -23,18 +23,18 @@ Simply edit a few variables within the program, all at the top:
 **TMPFILE=/tmp/tmptargets** ; temp working file, you can leave this\
 **JACKTMP=/tmp/jacktmp** ; temp working file for curi0usJack's file, you can leave this\
 **CURLOPTIONS="--connect-timeout 10"** ; add additional curl options here, such as proxies, you can leave this\
-**DESTINATION="http://funkytown.com/DIR/file.doc"** ; this is where to redirect sandboxes -- make it look as similar to the original as possible, but make it redirect to a clean (malware-free) version of your payload!\
+**DESTINATION="http://funkytown.com/DIR/file.doc"** ; this is where to redirect sandboxes -- make it look as similar to the original as possible, but make it redirect to a clean (malware-free) version of your payload!
 
 #### Adding Useragents / ASNs / Misc networks to mkaccess_red
 Similar to the section above, all ASN/useragent/misc configs are kept internal to keep the file portable/easy to deal with.
 
 #### AGENTS
-Simply add additional regexs to match agents inside of this variable, example:\
+Simply add additional regexs to match agents inside of this variable, example:
 
        AGENTS="^.*cloudfront.*$ ^curl.*$ ^Python-urllib.*$ ^Wget.*$ ^Lynx.*$ ^Slackbot-LinkExpanding.*$"
 
 #### ASNs
-Add additional ASNs to this variable in the form of CompanyName_ASN#, example:\
+Add additional ASNs to this variable in the form of CompanyName_ASN#, example:
 
        ASNS="zScaler_AS22616 DigitalOcean_AS46652 ForcePoint_AS13448 CiscoMeraki_AS395831"
 
