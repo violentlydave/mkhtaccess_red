@@ -41,7 +41,9 @@ WHOIS=$(which whois)
 #VERBOSE="you know this, man"
 
 ## User Agents to block
-#    -- From @curi0usJack 's list
+#    -- Started w/ @curi0usJack 's list
+#    -- Added "linux" -- consider what your payload is aimed at, and redirect everything else. Win payload? Block OSX.
+
 AGENTS="^.*linux.*$ ^.*cloudfront.*$ ^curl.*$ ^Python-urllib.*$ ^Wget.*$ ^Lynx.*$ ^Slackbot-LinkExpanding.*$"
 
 ## INDIVIDUAL Companies -- add additional ones in the form of CompanyName_AS12345 (where AS is their ASN,  in this format)
