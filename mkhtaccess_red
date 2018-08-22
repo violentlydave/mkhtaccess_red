@@ -42,7 +42,7 @@ WHOIS=$(which whois)
 
 ## User Agents to block
 #    -- From @curi0usJack 's list
-AGENTS="^.*cloudfront.*$ ^curl.*$ ^Python-urllib.*$ ^Wget.*$ ^Lynx.*$ ^Slackbot-LinkExpanding.*$"
+AGENTS="^.*linux.*$ ^.*cloudfront.*$ ^curl.*$ ^Python-urllib.*$ ^Wget.*$ ^Lynx.*$ ^Slackbot-LinkExpanding.*$"
 
 ## INDIVIDUAL Companies -- add additional ones in the form of CompanyName_AS12345 (where AS is their ASN,  in this format)
 # - Fortigate adds 27k+ listings, add if you want: FORTIGATE_AS577 FORTIGATE_AS852 FORTIGATE_AS2828 FORTIGATE_AS6461
