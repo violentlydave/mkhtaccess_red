@@ -1,6 +1,8 @@
-# mkhtaccess_red
+ # mkhtaccess_red
 
- This is done via some User-Agent matching, pulling networks advertised by ASNs of known sandbox companies, and "MISC" sources that were found from previous real-world phishing attempts.    The original idea came up during some phishing campaigns a while ago, later someone pointed me to @curi0usJack's htaccess file which provided the user-agents.
+Sandboxing makes phishing / infection hard.  If a target can hand off your payload to a third party to "Detonate", how can you get them to run your payload?!    Simple:  by handing sandboxes innocuous payloads to detonate.
+
+This is done via some User-Agent matching, pulling networks advertised by ASNs of known sandbox companies, and "MISC" sources that were found from previous real-world phishing attempts.    The original idea came up during some phishing campaigns a while ago, later someone pointed me to @curi0usJack's htaccess file which provided the user-agents.
  
  Thanks to @curi0usJack for some data source/info, and thanks to @imoorhouse904 for testing and data to add!
  
