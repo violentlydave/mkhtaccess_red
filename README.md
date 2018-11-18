@@ -7,7 +7,7 @@ This is done via some User-Agent matching, pulling networks advertised by ASNs o
  Thanks to @curi0usJack for some data source/info, and thanks to @imoorhouse904 for testing and data to add!
  
 __TLDR; edit DESTINATION to point to benign version of payload, put output into .htaccess, hopefully enjoy phishing again!__
-
+-------------------------------------
 ### Apache Config
 Make sure your apache configs AllowOverride, so the htaccess will work.   Example:
 
@@ -29,17 +29,17 @@ Simply edit a few variables within the program, all at the top:
 
 #### Adding Useragents / ASNs / Misc networks to mkaccess_red
 Similar to the section above, all ASN/useragent/misc configs are kept internal to keep the file portable/easy to deal with.
-
+---------------------------------------
 #### AGENTS
 Simply add additional regexs to match agents inside of this variable, example:
 
        AGENTS="^.*cloudfront.*$ ^curl.*$ ^Python-urllib.*$ ^Wget.*$ ^Lynx.*$ ^Slackbot-LinkExpanding.*$"
-
+---------------------------------------
 #### ASNs
 Add additional ASNs to this variable in the form of CompanyName_ASN#, example:
 
        ASNS="zScaler_AS22616 DigitalOcean_AS46652 ForcePoint_AS13448 CiscoMeraki_AS395831"
-
+---------------------------------------
 #### Misc Nets/Addresses:
 Add additional lines per "misc" source, starting with a "#" !
 Add in the form of:\
