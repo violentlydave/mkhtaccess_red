@@ -31,7 +31,6 @@ Simply edit a few variables within the program, all at the top:
 #### Adding Useragents / ASNs / Misc networks to mkaccess_red
 Similar to the section above, all ASN/useragent/misc configs are kept internal to keep the file portable/easy to deal with.
 
----------------------------------------
 #### AGENTS
 Simply add additional regexs to match agents inside of this variable, example:
 
