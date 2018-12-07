@@ -2,7 +2,7 @@
 #
 # mkhtaccess_red - Combine multiple sources to create an AV/TOR deflecting HTACCESS. 
 #		- Twitter: @violentlydave / insomniacsecurity.com
-#		- Tue Aug 21 19:51:32 EDT 2018
+#		- Fri Dec  7 09:24:41 EST 2018
 #
 #	Currently uses:
 #	- curi0usJack's HTACCESS
@@ -88,6 +88,8 @@ ASNS="FORTIGATE_AS2828 FORTIGATE_AS6461 ProofPoint_AS22843 ProofPoint_AS13916 Pr
 #MISC-72.55.128.0/18-IWEB_BLK_03-phish
 #MISC-144.76.0.0/16-Hetzner Obline GmbH-phish
 #MISC-83.31.0.0/16-NEOSTRADA_ADSL-phish
+#MISC-71.78.98.144/29-MIMECAST-customer-mms_11-12
+#MISC-69.38.179.168/29-MIMECAST-customer-mms_11-12
 
 #########################################################################
 # - let's do this ..
