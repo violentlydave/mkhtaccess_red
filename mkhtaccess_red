@@ -90,6 +90,8 @@ ASNS="FORTIGATE_AS2828 FORTIGATE_AS6461 ProofPoint_AS22843 ProofPoint_AS13916 Pr
 #MISC-83.31.0.0/16-NEOSTRADA_ADSL-phish
 #MISC-71.78.98.144/29-MIMECAST-customer-mms_11-12
 #MISC-69.38.179.168/29-MIMECAST-customer-mms_11-12
+#MISC-35.157.190.224/27-Barracuda-customer-mms_11-12
+#
 
 #########################################################################
 # - let's do this ..
