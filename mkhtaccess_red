@@ -91,6 +91,9 @@ ASNS="FORTIGATE_AS2828 FORTIGATE_AS6461 ProofPoint_AS22843 ProofPoint_AS13916 Pr
 #MISC-71.78.98.144/29-MIMECAST-customer-mms_11-12
 #MISC-69.38.179.168/29-MIMECAST-customer-mms_11-12
 #MISC-35.157.190.224/27-Barracuda-customer-mms_11-12
+#MISC-108.171.128.0/29-SCANSAFE-Cisco
+#MISC-162.210.80.0/27-SCANSAFE-Cisco
+#MISC-198.41.8.0/21-SCANSAFE-Cisco
 #
 
 #########################################################################
