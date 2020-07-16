@@ -209,7 +209,7 @@ done
 
 echo "# Fresh copy of PrivateInternetAccess Endpoints (PIA) - $(date +%Y%m%d_%H%M%S)" >> $WORKINGFILE
 echo "#   Endpoints aren't shared, but are often hosted on same /24ish area of VPN connections, so we'll just" >> $WORKINGFILE
-echo "#   grab server IPs, change to /24s... not ideal, but it works." >> $WORKINGFILE"
+echo "#   grab server IPs, change to /24s... not ideal, but it works." >> $WORKINGFILE
 
 PIA=$(curl -s https://www.privateinternetaccess.com/pages/network/ | grep ".privateinternetaccess.com" | grep -v "www.privateinternetaccess" | grep hostname | cut -d \> -f 2 | cut -d \< -f 1 | sort | uniq)
 
