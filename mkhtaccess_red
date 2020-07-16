@@ -2,7 +2,7 @@
 #
 # mkhtaccess_red - Combine multiple sources to create an AV/TOR deflecting HTACCESS. 
 #		- Twitter: @violentlydave / insomniacsecurity.com
-#		- Fri Dec  7 09:24:41 EST 2018
+#		- Thu 16 Jul 2020 06:37:52 PM EDT - happy covid updates!
 #
 #	Currently uses:
 #	- curi0usJack's HTACCESS
@@ -10,6 +10,7 @@
 #	- AWS's current IP list
 #	- Google Cloud's current IP list
 #	- Microsoft Azure's current iP list
+#       - privateinternetaccess (sorta) IP list
 #	- Digital Ocean's current IP list (based on ASN)
 #	- zScaler's current IP list (based on ASN)
 #	- Proofpoint's current iP list (based on ASN)
@@ -202,6 +203,28 @@ for MICROSOFTIP in $($CURL $CURLOPTIONS -s "$MSIPXMLURL" |grep "IpRange Subnet" 
 	echo "$MICROSOFTIP" | sed -E -e "s/\/3[12]//g" -e "s/\.[0-9]{1,3}\/2[456789]/\.0\/24/g" -e "s/\.[0-9]{1,3}\/30/\.0\/24/g" >> $TMPFILE
         fi
 done
+
+#########################################################################
+## Grab PIA's VPN concentrator ips, and block the /24s, which often is where the endpoints are.  NOT ALWAYS, THIS IS NOT PERFECT!
+
+echo "# Fresh copy of PrivateInternetAccess Endpoints (PIA) - $(date +%Y%m%d_%H%M%S)" >> $WORKINGFILE
+echo "#   Endpoints aren't shared, but are often hosted on same /24ish area of VPN connections, so we'll just" >> $WORKINGFILE
+echo "#   grab server IPs, change to /24s... not ideal, but it works." >> $WORKINGFILE"
+
+PIA=$(curl -s https://www.privateinternetaccess.com/pages/network/ | grep ".privateinternetaccess.com" | grep -v "www.privateinternetaccess" | grep hostname | cut -d \> -f 2 | cut -d \< -f 1 | sort | uniq)
+
+for PIAENDPOINT in $PIA; do
+        for NET in $(nslookup $PIAENDPOINT | grep "Address: " | cut -d " " -f 2 | cut -d \. -f 1,2,3 | sort | uniq); do
+        OUTPUTNET=$(echo $NET".0/24")
+        AMIHERE=$(grep -i "$OUTPUTNET" $TMPFILE)
+        if [[ -n "$AMIHERE" ]]; then
+                if [[ -n "$VERBOSE" ]]; then echo "PIA: $OUTPUTNET already in file.."; fi
+        else
+                echo "$OUTPUTNET" >> $TMPFILE
+        fi
+        done
+done
+
 
 #########################################################################
 ## Now, let's go for companies by ASN.
