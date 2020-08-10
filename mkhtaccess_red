@@ -2,7 +2,8 @@
 #
 # mkhtaccess_red - Combine multiple sources to create an AV/TOR deflecting HTACCESS. 
 #		- Twitter: @violentlydave / insomniacsecurity.com
-#		- Fri 10 Jul 2020 10:37:47 AM EDT
+#		- Sun Aug  9 21:58:45 EDT 2020
+#		- version 7.8.9 (or some other silly version number to make it seem cool and well aged)
 #
 #	Currently uses:
 #	- curi0usJack's HTACCESS
