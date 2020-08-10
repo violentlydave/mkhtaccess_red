@@ -2,100 +2,155 @@
 #
 # mkhtaccess_red - Combine multiple sources to create an AV/TOR deflecting HTACCESS. 
 #		- Twitter: @violentlydave / insomniacsecurity.com
-#		- Thu 16 Jul 2020 06:37:52 PM EDT - happy covid updates!
+#		- Fri 10 Jul 2020 10:37:47 AM EDT
 #
 #	Currently uses:
 #	- curi0usJack's HTACCESS
 #	- tor's current exit list
-#	- AWS's current IP list
-#	- Google Cloud's current IP list
-#	- Microsoft Azure's current iP list
-#       - privateinternetaccess (sorta) IP list
-#	- Digital Ocean's current IP list (based on ASN)
-#	- zScaler's current IP list (based on ASN)
-#	- Proofpoint's current iP list (based on ASN)
-#	- Forcepoint's current ip list (based on ASN)
-#	#- Fortigate's current ip list (based on ASN) - removed due to size
-#	#- ServerBreach/SafeBreach (based on ASN) - no ips/nets directly attributed to these asns
-#	- McAfee's current ip lis t(baesd on ASN)
-#	- Cisco Meraki's current ip list (based on ASN)
-#	-- Finally, MISC SOURCSE:
+#	- Clouds: Amazon WS, GoogleCP, MicrosoftAzure, IBM, Oracle
+#	- Consumer VPNS: PrivateInternetaccess's current IPlist (sorta)
+#	- ASNs for: DigitalOcean, ZScaler, Proofpoint, Forcepoint, Mvacfee, Cisco(lots), Fortigate, McAfee, Microsoft, Fastly, Amazon
+#	-- Finally, MISC SOURCES:
 #		- MicrosoftCorp's ip space in the same ownership as seen from Office365's sandbox
 #		- Misc seen via previous phishes
-#
+
+IFS=$'\n'
+OPTIND=1
+
+help () {
+        echo ""
+        echo "$0 -- Dynamically generate an htaccess file to redirect sandbox/blueteam to a benign sample."
+	echo "	twitter.com/violentlydave / www.insomniacsecurity.com"
+        echo ""
+        echo "Command line arguments: [you have to use one option, even just -v or -z, otherwise all are optional]"
+	echo ""
+        echo "  -d Destination URL (add full url in quotes, \"http://someurl.com/mybenignsample.docx\")"
+	echo "		Note: This can be specified as a static variable \$DESTINATION" 
+	echo "		If this command line variable is used, it over-rides the \$DESTINATION variable."
+        echo "  -a ASNs (add single or multiple ASNs in quotes, \"NetworkName1_ASN1234 NetworkName2_ASN4321\")"
+	echo "		Note: This can be specified as a static variable \$DEFAULTASN, if this commandline is used,"
+	echo "		ASN will be added to any ASNs in the \$DEFAULTASN variable."
+        echo "  -u USERAGENTS (add single or multiple user agents in regex format in quotes, \"^.*SomeScrapingBot.*$\")"
+	echo "		Note: UserAgents can be added to the static variable \$DEFAULTAGENTS, and if this command"
+	echo "		line is used any specified user agents will be added to the \$AGENTS variable."
+	echo "  -e ExtraIPs-or-Nets (add single or multiple ips or nets in quotes, \"127.0.0.1,10.6.5.0/24\".)"
+	echo "		Note: These can be added statically as MISC sources in the code." 
+	echo "	-o OutputFile (lets you set the path/name of the output, or it will default to /tmp/redhtaccess)"
+	echo "  -v VERBOSE MODE (adds more info about behind the scenes/deduping)"
+	echo ""
+	echo "  -z I DONT CARE, JUST RUN THIS THING (will run w/ default static variables/info, and generate an htaccess)"
+        echo ""
+        echo ""
+        exit 1
+}
+
+# check if there are any variables, if not show help and exit
+if [ $# -eq 0 ]; then
+        help
+        exit 1
+fi
+
+while getopts "d:a:u:e:o:t:vz" opt; do
+    case "$opt" in
+    d)  
+        DESTINATION="$OPTARG"
+        ;;
+    a)  
+        ASNZ="$OPTARG"
+        ;;
+    u)  
+        AGENTZ="$OPTARG"
+        ;;
+    e)  
+        EXTRAIPZ="$OPTARG"
+        ;;
+    o)
+	WORKINGFILE="$OPTARG"
+	;;
+    t)
+	TMPFILE="$OPTARG"
+	;;
+    v)  
+        VERBOSE="TRUE"
+        ;;
+    z)
+        ;;
+    *)  
+        help
+        ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+#########################################################################
+# Check for some requirements
+CURL=$(command -v curl)
+if [ -z "$CURL" ]; then echo "CURL is required! Try \"apt install curl\" or similar on your system."; exit 1; fi
+
+WHOIS=$(command -v whois)
+if [ -z "$WHOIS" ]; then echo "WHOIS is required! Try \"apt install nettools\" or similar on your system."; exit 1; fi
+
+DIG=$(command -v dig)
+if [ -z "$DIG" ]; then echo "DIG is required! Try \"apt install nettools\" or similar on your system."; exit 1; fi
 
 #########################################################################
 ## VARIABLES/stuff to change/etc
 # Tmp files to use
-WORKINGFILE=/tmp/redhtaccess; echo > $WORKINGFILE
-TMPFILE=/tmp/tmptargets; echo > $TMPFILE
-JACKTMP=/tmp/jacktmp; echo > $JACKTMP
+if [[ -z "$WORKINGFILE" ]]; then WORKINGFILE=/tmp/redhtaccess; fi 
+if [[ -z "$TMPFILE" ]]; then TMPFILE=/tmp/tmptargets; fi
+echo > $WORKINGFILE
+echo > $TMPFILE
 
-# Destination = Where to redirect!
-#	so if you're trying to serve http://somedomain.com/somedir/totallymalware.docx (dirty), make this
-#	point to http://somedomain.com/someotherdir/totallymalware.docx (which is actually clena)
-DESTINATION="http://gizmodo.com/"
+#########################################################################
+## Destination = where to send the sandboxes.. your benign sample.
+#	Command line destination over rides the hard coded one.
+if [[ -z "$DESTINATION" ]]; then DESTINATION="http://gizmodo.com/"; fi
 
-CURL=$(which curl)
-CURLOPTIONS="--connect-timeout 10"
-WHOIS=$(which whois)
-#VERBOSE="you know this, man"
-
+#########################################################################
 ## User Agents to block
-#    -- Started w/ @curi0usJack 's list
-#    -- Added "linux" -- consider what your payload is aimed at, and redirect everything else. Win payload? Block OSX.
+DEFAULTAGENTS="^.*AWS.*Security.*$ ^.*ssllabs.*$ ^.*clamav.*$ ^.*openvas.*$ ^.*ltx71.*$ ^.*burp.*$ ^.*linux.*$ ^.*cloudfront.*$ ^curl.*$ ^.*ython.*$ ^Wget.*$ \
+^Lynx.*$ ^.*YandexBot.*$ ^.*imbostratus.*$ ^.*MJ12bot.*$ ^Slackbot-LinkExpanding.*$ ^.*zgrab.*$ ^.*Go-http.*$ ^.*[bB]anner.*$ ^.*gdnplus.*$"
 
-AGENTS="^.*linux.*$ ^.*cloudfront.*$ ^curl.*$ ^.*ython.*$ ^Wget.*$ ^Lynx.*$ ^.*YandexBot.*$ ^.*imbostratus.*$ ^.*MJ12bot.*$ ^Slackbot-LinkExpanding.*$ ^.*zgrab.*$ ^.*Go-http.*$ ^.*[bB]anner.*$ ^.*gdnplus.*$"
+if [[ -z "$AGENTZ" ]]; then 
+	AGENTS="$DEFAULTAGENTS"
+else
+	AGENTS="$DEFAULTAGENTS $AGENTZ"	
+fi
 
-## INDIVIDUAL Companies -- add additional ones in the form of CompanyName_AS12345 (where AS is their ASN,  in this format)
-# - Fortigate adds 27k+ listings, add if you want: FORTIGATE_AS577 FORTIGATE_AS852 FORTIGATE_AS2828 FORTIGATE_AS6461
-#	adds ~ 30k+ listings, goes to ~ 6k listings after deduping - the bulk from AS577	
-# - Powertech = german DSL network.. we've seen traffic..
-#
-ASNS="FORTIGATE_AS2828 FORTIGATE_AS6461 ProofPoint_AS22843 ProofPoint_AS13916 ProofPoint_AS26211 zScaler_AS22616 DigitalOcean_AS46652 ForcePoint_AS13448 McAfee_AS7754 McAfee_AS17370 McAfee_AS46484 CiscoMeraki_AS395831"
+#########################################################################
+## ASNs to Block --  add additional ASNs in the form of CompanyName_AS12345 (where AS is their ASN,  in this format)
+#	Alibaba_AS45102 - adds 30k+ after dedupe
+DEFAULTASNS="Neustar_AS12009 ZScaler_AS22616 ZScaler_AS53813 ZScaler_AS62044 FORTIGATE_AS2828 FORTIGATE_AS6461 ProofPoint_AS22843 ProofPoint_AS13916 ProofPoint_AS26211 DigitalOcean_AS46652 ForcePoint_AS13448 McAfee_AS7754 McAfee_AS17370 McAfee_AS46484 CiscoUmbrella_AS36692 CiscoTalos_AS55219 CiscoSecurityCloudOps_AS25605 CiscoPublic_11017 CiscoMeraki_AS395831 Fastly_54113 Microsoft_AS8069 Microsoft_AS8075 Amazon_AS14618"
 
+if [[ -z "$ASNZ" ]]; then
+	ASNS="$DEFAULTASNS"
+else
+	ASNS="$DEFAULTASNS $ASNZ"
+fi
+
+#########################################################################
 ## Misc sources (some weird) seen in phishing attempts
-# - add extras in this format, the code self-references these for the loop.
-# -   #MISC-ipORnetwork-Ownername-reasonhere
-#
-#MISC-148.251.45.0/24-Hetzner-Seen in phish .. originally single .254ip .. rounded up to 24
-#MISC-195.47.249.0/24-Bayer-Seen in phish
-#MISC-77.40.129.0/24-Powertech-Seen in phish .. originally single .123ip .. rounded up to 24
-#MISC-209.107.192.0/19-Bandcon-Seen in phish
-#MISC-84.163.136.0/24-Deutsche Telekom AG-Seen in phish .. originally single .35ip .. rounded up to 24
-#MISC-66.249.64.0/19-Google-Seen in phish
-#MISC-89.244.68.0/24-Versatel Deutschland-Seen in phish .. originally single .136ip .. rounded up to 24
-#MISC-107.150.64.0/19-not sure-Seen in phish
-#MISC-40.96.0.0/12-MicrosoftCorp-40.107.242.0 seen in previous phish
-#MISC-40.125.0.0/17-MicrosoftCorp-
-#MISC-40.80.0.0/12-MicrosoftCorp-
-#MISC-40.74.0.0/15-MicrosoftCorp-
-#MISC-40.120.0.0/14-MicrosoftCorp-
-#MISC-40.124.0.0/16-MicrosoftCorp-
-#MISC-40.112.0.0/13-MicrosoftCorp-
-#MISC-40.76.0.0/14-MicrosoftCorp-
-#MISC-91.32.0.0/16-Deutsche Telekom AG-seen in phish
-#MISC-87.122.0.0/15-Versatel Combo-seen in phish
-#MISC-146.52.0.0/16-KABEL_DEUTCHLAND_CUSTOMER_SERV-phish
-#MISC-212.186.0.0/16-UPC Austria GmbH-phish
-#MISC-197.226.177.0/24-GTS Telecom Romania Operations-phish
-#MISC-107.181.69.0/24-New York Clou-phish
-#MISC-78.109.0.0/16-ORG_TBL1_RIPE-overlarge chunk
-#MISC-69.164.111.192/27-SUNGARD_-PHSIH
-#MISC-84.136.0.0/16-Deutsche Telekom AG -phish
-#MISC-73.253.0.0/16-Comcast IP Serv-PHISH
-#MISC-128.31.0.0/16-MIT-phish
-#MISC-104.238.46.0/24-VPN Consumer Net-phish
-#MISC-72.55.128.0/18-IWEB_BLK_03-phish
-#MISC-144.76.0.0/16-Hetzner Obline GmbH-phish
-#MISC-83.31.0.0/16-NEOSTRADA_ADSL-phish
-#MISC-71.78.98.144/29-MIMECAST-customer-mms_11-12
-#MISC-69.38.179.168/29-MIMECAST-customer-mms_11-12
-#MISC-35.157.190.224/27-Barracuda-customer-mms_11-12
-#MISC-108.171.128.0/29-SCANSAFE-Cisco
-#MISC-162.210.80.0/27-SCANSAFE-Cisco
-#MISC-198.41.8.0/21-SCANSAFE-Cisco
-#
+# -   MISC-ipORnetwork-Ownername
+DEFAULTMISC="MISC-148.251.45.0/24-Hetzner MISC-195.47.249.0/24-Bayer MISC-77.40.129.0/24-Powertech \
+MISC-209.107.192.0/19-Bandcon MISC-84.163.136.0/24-Deutsche MISC-66.249.64.0/19-Google \
+MISC-89.244.68.0/24-VersatelDeutschland MISC-107.150.64.0/19-Unknown MISC-40.96.0.0/12-MicrosoftCorp \
+MISC-40.125.0.0/17-MicrosoftCorp MISC-40.80.0.0/12-MicrosoftCorp MISC-40.74.0.0/15-MicrosoftCorp \
+MISC-40.120.0.0/14-MicrosoftCorp MISC-40.124.0.0/16-MicrosoftCorp MISC-40.112.0.0/13-MicrosoftCorp \
+MISC-40.76.0.0/14-MicrosoftCorp MISC-91.32.0.0/16-Deutsche_Telekom MISC-87.122.0.0/15-Versatel_Combo \
+MISC-146.52.0.0/16-KABEL_DEUTCHLAND_CUSTOMER_SERV MISC-212.186.0.0/16-UPC_Austria \
+MISC-197.226.177.0/24-GTS_Telecom_Romania MISC-107.181.69.0/24-NewYorkCloud MISC-78.109.0.0/16-ORG_TBL1_RIPE \
+MISC-69.164.111.192/27-SUNGARD MISC-84.136.0.0/16-Deutsche_Telecom MISC-73.253.0.0/16-Comcast_IP_Serv \
+MISC-128.31.0.0/16-MIT MISC-104.238.46.0/24-VPN_Consumernet MISC-72.55.128.0/18-IWEB_BLK_03 \
+MISC-144.76.0.0/16-Hetzner_Obline MISC-83.31.0.0/16-NEOSTRADA_ADSL MISC-71.78.98.144/29-MIMECAST-customer \
+MISC-69.38.179.168/29-MIMECAST-customer MISC-35.157.190.224/27-Barracuda-customer MISC-108.171.128.0/29-SCANSAFE \
+MISC-162.210.80.0/27-SCANSAFE-Cisco MISC-198.41.8.0/21-SCANSAFE-Cisco"
+
+if [[ -z "$EXTRAIPZ" ]]; then
+	MISC="$DEFAULTMISC"
+else
+	MISC="$DEFAULTMISC $EXTRAIPZ"
+fi
 
 #########################################################################
 # - let's do this ..
@@ -105,187 +160,182 @@ echo -e "mkhtaccess_red\t\t-\t\t@violentlydave / insomniacsecurity.com"
 echo "##############################################################################"
 echo ""
 
-if [ "$1" == "-v" ]; then VERBOSE="hellsyeah"; fi
-if [ "$1" == "-h" ]; then 
-		echo "Make an Apache HT access to redirect Sandbox environments away from payloads."
-		echo ""
-		echo " -h = help (this screen)"
-		echo " -v = verbose mode"
-		echo ""
-		echo "Variables at the top of the file set behavior, such as:" 
-		echo -e "\t\$WORKINGFILE -- sets output destination for htaccess"
-		echo -e "\t\$ASNS -- the list of company ASNs to pull, CompanyName_AS1234 style"
-		echo -e "\t\$VERBOSE -- you can manually set it to exist, or use -v"
-		echo ""
-		exit 0
-	fi
-
-if [[ -z $CURL ]]; then echo ".. Curl could not be found, and is required.. sorry!"; exit 1; fi
-if [[ -z $WHOIS ]]; then echo ".. whois could not be found, and is required.. sorry!"; exit 1; fi
-
 #########################################################################
 ## Start
 echo "#" > $WORKINGFILE
 echo "# $0 to block AV Sandboxes - twitter.com/violentlydave / InsomniacSecurity.com - started:  $(date +%Y%m%d_%H%M%S)" >> $WORKINGFILE
-
 echo "#" >> $WORKINGFILE
 echo "RewriteEngine On" >> $WORKINGFILE
 echo >> $WORKINGFILE
 
 #########################################################################
-## Grab curi0usJack's .htaccess: https://gist.github.com/curi0usJack/971385e8334e189d93a6cb4671238b10
+## Add our agents, and curi0usJack's defaults - https://gist.github.com/curi2usJack/971385e8334e189d93a6cb4671238b10
 echo -e "[*]\tGrabbing curi0usJack's list ..." 
-"$CURL" $CURLOPTIONS -s https://gist.githubusercontent.com/curi0usJack/971385e8334e189d93a6cb4671238b10/raw/fa272ecef60c86fab9bca0c8e7890170ff7219fd/.htaccess > $JACKTMP 
+JACKTMP=$($CURL --connect-timeout 10 -s https://gist.githubusercontent.com/curi0usJack/971385e8334e189d93a6cb4671238b10/raw/fa272ecef60c86fab9bca0c8e7890170ff7219fd/.htaccess)
 
-echo "# Known Bad User Agents (thx curi0usJack): $(date +%Y%m%d_%H%M%S)" >> $WORKINGFILE
-for USERAGENT in $AGENTS; do
-	echo -e "\tRewriteCond\t\t%{HTTP_USER_AGENT}\t\t\"$USERAGENT\" [OR,NC]" >> $WORKINGFILE		
-done
+#echo "# Known Bad User Agents (thx curi0usJack): $(date +%Y%m%d_%H%M%S)" >> $WORKINGFILE
+echo -e "[*]\tAdding additional Bad User agents ..."
+	for USERAGENT in $AGENTS; do
+		echo -e "\tRewriteCond\t\t%{HTTP_USER_AGENT}\t\t\"$USERAGENT\" [OR,NC]"
+	done >> $WORKINGFILE
 
-
-grep -i "RewriteCond" $JACKTMP | grep -i expr | cut -d \' -f 2 | cut -d \' -f 1 >> $TMPFILE
-rm "$JACKTMP"
-
+	for THING in $JACKTMP; do
+		echo $THING | grep -i Rewrite | cut -d \' -f 2 | grep "0/" 
+	done >> $TMPFILE
+ 
 #########################################################################
 ## Now, update w/ exit nodes: https://check.torproject.org/exit-addresses
 echo -e "[*]\tGrabbing TOR exit node list ..."
-echo "# Live copy of current TOR exit nodes - pulled: $(date +%Y%m%d_%H%M%S)" >> $WORKINGFILE
+echo "# Live copy of current TOR exit nodes - pulled: $(date +%Y%m%d_%H%M%S)" >> "$WORKINGFILE"
 
 # Grabs current exit notes, and lightly attempts de-duping from the current list..
-for EXIT in $($CURL $CURLOPTIONS -s https://check.torproject.org/exit-addresses | grep ExitAddress | awk '{print $2}'); do 
-	AMIHERE=$(grep -i "$EXIT" $TMPFILE)
-	if [[ -n "$AMIHERE" ]]; then
-		if [[ -n "$VERBOSE" ]]; then echo "TOR: $EXIT already in the file.."; fi
-	else
-		echo "$EXIT" | sed -E -e "s/\/3[12]//g" -e "s/\.[0-9]{1,3}\/2[456789]/\.0\/24/g" -e "s/\.[0-9]{1,3}\/30/\.0\/24/g" >> $TMPFILE
-	fi
-done
+for EXIT in $($CURL --connect-timeout 10 -s https://check.torproject.org/exit-addresses | grep ExitAddress | cut -d " " -f 2); do
+        AMIHERE=$(grep -E -i -e '^'"$EXIT"'$' "$TMPFILE")
+        if [[ -z "$AMIHERE" ]]; then
+                echo "$EXIT" | sed -E -e "s/\/3[12]//g" -e "s/\.[0-9]{1,3}\/2[456789]/\.0\/24/g" -e "s/\.[0-9]{1,3}\/30/\.0\/24/g"
+        fi
+done >> "$TMPFILE"
 
 #########################################################################
 ## Now, grab all AWS ips: https://ip-ranges.amazonaws.com/ip-ranges.json
 echo -e "[*]\tGrabbing AWS ip/network list ..."
-echo "# Live copy of AWS ip space - pulled: $(date +%Y%m%d_%H%M%S)" >> $WORKINGFILE
-for AWSIP in $($CURL $CURLOPTIONS -s https://ip-ranges.amazonaws.com/ip-ranges.json | grep ip_prefix | awk '{print $2}' | sed -e "s/\"//g" -e "s/\,//g"); do
-	AMIHERE=$(grep -i "$AWSIP" $TMPFILE)
-	if [[ -n "$AMIHERE" ]]; then
-		if [[ -n "$VERBOSE" ]]; then echo "AWS: $AWSIP already in file.."; fi
-	else
-	echo "$AWSIP" | sed -E -e "s/\/3[12]//g" -e "s/\.[0-9]{1,3}\/2[456789]/\.0\/24/g" -e "s/\.[0-9]{1,3}\/30/\.0\/24/g" >> $TMPFILE
+echo "# Live copy of AWS ip space - pulled: $(date +%Y%m%d_%H%M%S)" >> "$WORKINGFILE"
+for AWSIP in $($CURL --connect-timeout 10 -s https://ip-ranges.amazonaws.com/ip-ranges.json | grep ip_prefix | cut -d " " -f 8 | sort | uniq | sed -e "s/\"//g" -e "s/\,//g"); do
+	AMIHERE=$(grep -E -i -e '^'"$AWSIP"'$' "$TMPFILE")
+	if [[ -z "$AMIHERE" ]]; then
+		echo "$AWSIP" | sed -E -e "s/\/3[12]//g" -e "s/\.[0-9]{1,3}\/2[456789]/\.0\/24/g" -e "s/\.[0-9]{1,3}\/30/\.0\/24/g" 
 	fi
-done
+done >> "$TMPFILE"
 
 #########################################################################
 ## Now, grab all GoogleCloud ips: dig txt _cloud-netblocks.googleusercontent.com
 echo -e "[*]\tGrabbing Google Cloud ip/network list ..."
-echo "# Live copy of GoogleCloud ip space - pulled: $(date +%Y%m%d_%H%M%S)" >> $WORKINGFILE
-for GOOGLEIPGROUP in $(dig txt _cloud-netblocks.googleusercontent.com +short | tr " " "\n" | grep include | cut -f 2 -d \:); do
-	for GOOGLEIP in $(dig txt "$GOOGLEIPGROUP" +short | tr " " "\n" | grep ip4  | cut -f 2 -d : | sort -n); do
-		AMIHERE=$(grep -i "$GOOGLEIP" $TMPFILE)
-		if [[ -n "$AMIHERE" ]]; then
-			if [[ -n "$VERBOSE" ]]; then echo "Google Cloud: $GOOGLEIP already in file.."; fi
-		else
-		echo "$GOOGLEIP" | sed -E -e "s/\/3[12]//g" -e "s/\.[0-9]{1,3}\/2[456789]/\.0\/24/g" -e "s/\.[0-9]{1,3}\/30/\.0\/24/g" >> $TMPFILE
+echo "# Live copy of GoogleCloud ip space - pulled: $(date +%Y%m%d_%H%M%S)" >> "$WORKINGFILE"
+for GOOGLEIPGROUP in $($DIG txt _cloud-netblocks.googleusercontent.com +short | tr " " "\n" | grep include | cut -f 2 -d \:); do
+	for GOOGLEIP in $($DIG txt "$GOOGLEIPGROUP" +short | tr " " "\n" | grep ip4  | cut -f 2 -d : | sort -n); do
+		AMIHERE=$(grep -E -i '^'"$GOOGLEIP"'$' "$TMPFILE")
+		if [[ -z "$AMIHERE" ]]; then
+			echo "$GOOGLEIP" | sed -E -e "s/\/3[12]//g" -e "s/\.[0-9]{1,3}\/2[456789]/\.0\/24/g" -e "s/\.[0-9]{1,3}\/30/\.0\/24/g" 
 		fi
 	done
-done
+done >> "$TMPFILE"
 
 #########################################################################
 ## Now, grab all Microsoft Azure IPs: https://www.microsoft.com/en-us/download/confirmation.aspx?id=41653
 echo -e "[*]\tGrabbing Microsoft Azure ip/network list ..."
-echo "# Live copy of Microsoft Azure ip space - pulled: $(date +%Y%m%d_%H%M%S)" >> $WORKINGFILE
-MSIPXMLURL=$($CURL $CURLOPTIONS -s https://www.microsoft.com/en-us/download/confirmation.aspx?id=41653 | grep "click here" | sed -r -e 's/.*href="([^"#]+)".*/\1/')
+echo "# Live copy of Microsoft Azure ip space - pulled: $(date +%Y%m%d_%H%M%S)" >> "$WORKINGFILE"
+MSIPXMLURL=$($CURL --connect-timeout 10 -s https://www.microsoft.com/en-us/download/confirmation.aspx?id=41653 | grep "click here" | sed -r -e 's/.*href="([^"#]+)".*/\1/')
 
-for MICROSOFTIP in $($CURL $CURLOPTIONS -s "$MSIPXMLURL" |grep "IpRange Subnet" | cut -d \" -f 2 | cut -d \" -f 1); do
-	AMIHERE=$(grep -i "$MICROSOFTIP" $TMPFILE)
-	if [[ -n "$AMIHERE" ]]; then
-		if [[ -n "$VERBOSE" ]]; then echo "Microsoft AZURE: $MICROSOFTIP already in file.."; fi
-	else
-	echo "$MICROSOFTIP" | sed -E -e "s/\/3[12]//g" -e "s/\.[0-9]{1,3}\/2[456789]/\.0\/24/g" -e "s/\.[0-9]{1,3}\/30/\.0\/24/g" >> $TMPFILE
+for MICROSOFTIP in $($CURL --connect-timeout 10 -s "$MSIPXMLURL" |grep "IpRange Subnet" | cut -d \" -f 2 | cut -d \" -f 1); do
+	AMIHERE=$(grep -E -i -e '^'"$MICROSOFTIP"'$' "$TMPFILE")
+	if [[ -z "$AMIHERE" ]]; then
+		echo "$MICROSOFTIP" | sed -E -e "s/\/3[12]//g" -e "s/\.[0-9]{1,3}\/2[456789]/\.0\/24/g" -e "s/\.[0-9]{1,3}\/30/\.0\/24/g" 
         fi
-done
+done >> "$TMPFILE"
 
 #########################################################################
-## Grab PIA's VPN concentrator ips, and block the /24s, which often is where the endpoints are.  NOT ALWAYS, THIS IS NOT PERFECT!
+## Now grab Oracle Cloud: https://docs.cloud.oracle.com/en-us/iaas/tools/public_ip_ranges.json
+echo -e "[*]\tGrabbing Oracle Cloud ip/network list ..."
 
+for ORACLECIDR in $($CURL --connect-timeout 10 -s https://docs.cloud.oracle.com/en-us/iaas/tools/public_ip_ranges.json | grep cidr | cut -d  \" -f 4); do
+	AMIHERE=$(grep -E -i -e '^'"$ORACLECIDR"'$' "$TMPFILE")
+	if [[ -z "$AMIHERE" ]]; then
+		echo "$ORACLECIDR"
+	fi
+done >> "$TMPFILE"
+
+
+#########################################################################
+## For our next trick, IBM Cloud!
+echo -e "[*]\tGrabbing IBM Cloud ip/network list ..."
+
+for IBMCIDR in $($CURL --connect-timeout 10 -s https://cloud.ibm.com/docs-content/v1/content/27cd398b4db312c25f92e7499b4644552d428d6c/hardware-firewall-dedicated/ips.html?locale=en | grep "0/" | grep -v \>10\. | grep td | cut -d \> -f 2 | cut -d \< -f 1 | tr  ',' '\n'); do
+	AMIHERE=$(grep -E -i '^'"$IBMCIDR"'$' "$TMPFILE")
+	if [[ -z "$AMIHERE" ]]; then
+		echo "$IBMCIDR"
+	fi
+done >> "$TMPFILE"
+
+
+#########################################################################
+## Now, grab all PIA VPN server ips.. and hope that endpoints are on same network ;) https://www.privateinternetaccess.com/pages/network/
+echo -e "[*]\tGrabbing PrivateInternetAccess ip/network list ..."
 echo "# Fresh copy of PrivateInternetAccess Endpoints (PIA) - $(date +%Y%m%d_%H%M%S)" >> $WORKINGFILE
 echo "#   Endpoints aren't shared, but are often hosted on same /24ish area of VPN connections, so we'll just" >> $WORKINGFILE
 echo "#   grab server IPs, change to /24s... not ideal, but it works." >> $WORKINGFILE
 
-PIA=$(curl -s https://www.privateinternetaccess.com/pages/network/ | grep ".privateinternetaccess.com" | grep -v "www.privateinternetaccess" | grep hostname | cut -d \> -f 2 | cut -d \< -f 1 | sort | uniq)
+PIA=$(curl -s https://www.privateinternetaccess.com/pages/network/ | grep -E -i -e '.*hostname.*privateinternetaccess\.com.*' | cut -d \> -f 2 | cut -d \< -f 1 | sort | uniq)
 
 for PIAENDPOINT in $PIA; do
-        for NET in $(nslookup $PIAENDPOINT | grep "Address: " | cut -d " " -f 2 | cut -d \. -f 1,2,3 | sort | uniq); do
+        for NET in $(nslookup $PIAENDPOINT | grep "Address: " |grep -v 127.0.0 | cut -d " " -f 2 | cut -d \. -f 1,2,3 | sort | uniq); do
         OUTPUTNET=$(echo $NET".0/24")
-        AMIHERE=$(grep -i "$OUTPUTNET" $TMPFILE)
-        if [[ -n "$AMIHERE" ]]; then
-                if [[ -n "$VERBOSE" ]]; then echo "PIA: $OUTPUTNET already in file.."; fi
-        else
-                echo "$OUTPUTNET" >> $TMPFILE
+        AMIHERE=$(grep -E -i -e '^'"$OUTPUTNET"'$' "$TMPFILE")
+        if [[ -z "$AMIHERE" ]]; then
+                echo "$OUTPUTNET" >> "$TMPFILE"
         fi
         done
 done
 
-
 #########################################################################
 ## Now, let's go for companies by ASN.
+IFS=$' '
+echo -e "[*]\tGrabbing Networks by ASN ..."
 for PAIR in $ASNS; do
-	NAME=$(echo "$PAIR" | cut -d \_ -f 1); ASN=$(echo "$PAIR" | cut -d \_ -f 2)
-	echo -e "[*]\tGrabbing $NAME -- ASN: $ASN ip/network list ..."
-	echo "# Live copy of $NAME ips based on ASN $ASN - pulled: $(date +%Y%m%d_%H%M%S)" >> $WORKINGFILE
-	for IP in $($WHOIS -h whois.radb.net -- '-i origin '"$ASN"'' | grep "route:" | awk '{print $2}'); do
-		AMIHERE=$(grep -i "$IP" $TMPFILE)
-		if [[ -n "$AMIHERE" ]]; then
-			if [[ -n "$VERBOSE" ]]; then echo "$NAME: $IP already in file.."; fi
-                else
-			echo "$IP" | sed -E -e "s/\/3[12]//g" -e "s/\.[0-9]{1,3}\/2[456789]/\.0\/24/g" -e "s/\.[0-9]{1,3}\/30/\.0\/24/g" >> $TMPFILE
+        IFS=$'\n'
+        NAME=$(echo "$PAIR" | cut -d \_ -f 1); ASN=$(echo "$PAIR" | cut -d \_ -f 2)
+        echo -e "\t\t$NAME -- ASN: $ASN"
+        echo "# Live copy of $NAME ips based on ASN $ASN - pulled: $(date +%Y%m%d_%H%M%S)" >> $WORKINGFILE
+        for IP in $($WHOIS -h whois.radb.net -- '-i origin '"$ASN"'' | grep "route:" | awk '{print $2}'); do
+                AMIHERE=$(grep -E -i -e '^'"$IP"'$' $TMPFILE)
+                if [[ -z "$AMIHERE" ]]; then
+                        echo "$IP" | sed -E -e "s/\/3[12]//g" -e "s/\.[0-9]{1,3}\/2[456789]/\.0\/24/g" -e "s/\.[0-9]{1,3}\/30/\.0\/24/g"
                 fi
-        done
-done
+        done >> "$TMPFILE"
+        IFS=$' '
+done  
+IFS=$'\n'
 
 #########################################################################
 ## Misc sources (some weird) seen in phishing attempts
-echo -e -n "[*]\tAdding Misc-Sources list: "
-echo "# Misc Sources added .."  >> $WORKINGFILE
+echo -e "[*]\tAdding Misc-Sources list ..."
+echo "# Misc Sources added .."  >> "$WORKINGFILE"
 
-for IP in $(grep -E -i -e '^#MISC' $0 | cut -d \- -f 2); do
-	AMIHERE=$(grep "$IP" $TMPFILE)
-	NAME=$(grep -E -i -e '^#MISC' "$0" | grep -i "$IP" | cut -d \- -f 3)
-	echo -n "$NAME:$IP, "
-	if [[ -n "$AMIHERE" ]]; then
-		if [[ -n "$VERBOSE" ]]; then echo "$NAME: $IP already in file.."; fi
-	else
-		echo "$IP" | sed -E -e "s/\/3[12]//g" -e "s/\.[0-9]{1,3}\/2[456789]/\.0\/24/g" -e "s/\.[0-9]{1,3}\/30/\.0\/24/g" >> $TMPFILE
-	fi
-done
-echo " ..."
+IFS=$' '
+for THING in $(echo "$MISC"); do
+        IP=$(echo "$THING" | cut -d \- -f 2)
+        AMIHERE=$(grep -E -i -e '^'"$IP"'$' "$TMPFILE")
+        NAME=$(echo "$THING" | cut -d \- -f 3)
+        if [[ -z "$AMIHERE" ]]; then
+                echo "$IP" | sed -E -e "s/\/3[12]//g" -e "s/\.[0-9]{1,3}\/2[456789]/\.0\/24/g" -e "s/\.[0-9]{1,3}\/30/\.0\/24/g" 
+        fi
+done >> "$TMPFILE"
+IFS=$'\n'
 
 #########################################################################
 ## Cleanup file
 # Network Cleanup
-CURRENTTMPLENGTH="$(wc -l $TMPFILE | awk '{print $1}')"
+CURRENTTMPLENGTH="$(wc -l $TMPFILE | cut -d " " -f 1)"
 echo "[*]"; echo -e "[*]\t.. de-duping .. current number of ips or networks: $CURRENTTMPLENGTH"
 if [[ -n "$VERBOSE" ]]; then echo "Current TMPFILE size: $CURRENTTMPLENGTH"; fi
-if [[ -n "$VERBOSE" ]]; then echo "Current rewriteconds in working file: $(grep -E -c -i -e '^.*RewriteCond.*expr.*' '$WORKINGFILE')"; fi
+if [[ -n "$VERBOSE" ]]; then echo "Current rewriteconds in working file: $(grep -E -c -i -e '^.*RewriteCond.*expr.*' $WORKINGFILE)"; fi
 
-for NET in $(grep "/" $TMPFILE | cut -d \/ -f 1 | sort | uniq); do
+for NET in $(grep "/" "$TMPFILE" | cut -d \/ -f 1 | sort | uniq); do
         SMALLESTNUM=$(grep "$NET" "$TMPFILE" | cut -d \/ -f 2 | sort | head -1)
 	FINALNET="$NET/$SMALLESTNUM"
-	echo -e "\tRewriteCond\t\texpr\t\t\"-R '$FINALNET'\"\t\t[OR]" >> $WORKINGFILE
-done
+	echo -e "\tRewriteCond\t\texpr\t\t\"-R '$FINALNET'\"\t\t[OR]" 
+done >> "$WORKINGFILE"
 
-if [[ -n "$VERBOSE" ]]; then echo "Pre cleanup single ips in tmp: $(grep -v "/" $TMPFILE | sort | uniq | wc -l)"; fi
-if [[ -n "$VERBOSE" ]]; then echo "Pre cleanup single ips in working: $(grep RewriteCond $WORKINGFILE | grep -v "/" | sort | uniq | wc -l)"; fi
+if [[ -n "$VERBOSE" ]]; then echo "Pre cleanup single ips in tmp: $(grep -v "/" "$TMPFILE" | sort | uniq | wc -l)"; fi
+if [[ -n "$VERBOSE" ]]; then echo "Pre cleanup single ips in working: $(grep RewriteCond "$WORKINGFILE" | grep -v "/" | sort | uniq | wc -l)"; fi
 
 ## Single IP cleanup
-for SINGLEIP in $(grep -v "/" $TMPFILE | sort | uniq); do
-      NET="$(echo $SINGLEIP | cut -d \. -f 1,2,3).0/[1248]"
-      AMIHERE=$(grep -E -e "$NET" $WORKINGFILE)
-      if [[ -n "$AMIHERE" ]]; then
-               if [[ -n "$VERBOSE" ]]; then echo "Already in file: $AMIHERE"; fi
-       else
-	       echo -e "\tRewriteCond\t\texpr\t\t\"-R '$SINGLEIP'\"\t\t[OR]" >> $WORKINGFILE
+for SINGLEIP in $(grep -v "/" "$TMPFILE" | sort | uniq); do
+      NET="$(echo "$SINGLEIP" | cut -d \. -f 1,2,3).0/[1248]"
+      AMIHERE=$(grep -E -e "$NET" "$WORKINGFILE")
+      if [[ -z "$AMIHERE" ]]; then
+	       echo -e "\tRewriteCond\t\texpr\t\t\"-R '$SINGLEIP'\"\t\t[OR]" 
        fi
-done
+done >> "$WORKINGFILE"
 
 if [[ -n "$VERBOSE" ]]; then echo "Post cleanup in working: $(grep RewriteCond "$WORKINGFILE" | grep -v "/" | sort | uniq | wc -l)"; fi
 if [[ -n "$VERBOSE" ]]; then echo "final rewrite conds in working: $(grep -c "RewriteCond" "$WORKINGFILE")"; fi 
@@ -293,10 +343,10 @@ echo -e "[*]\t.. de-duped  .. current number of ips or networks: $(grep -E -c -e
 
 ########################################################################
 # Close the [or] boolean list..  (make this dynamic later)
-echo >> $WORKINGFILE
-echo "# Closing boolean list, and final rewrite.." >> $WORKINGFILE
-echo -e "\tRewriteCond\t\texpr\t\t\"-R '192.168.17.32'\"" >> $WORKINGFILE 
-echo -e "\tRewriteRule\t\t^.*$\t\t$DESTINATION\t\t[L,R=302]" >> $WORKINGFILE
+echo >> "$WORKINGFILE"
+echo "# Closing boolean list, and final rewrite.." >> "$WORKINGFILE"
+echo -e "\tRewriteCond\t\texpr\t\t\"-R '192.168.17.32'\"" >> "$WORKINGFILE"
+echo -e "\tRewriteRule\t\t^.*$\t\t$DESTINATION\t\t[L,R=302]" >> "$WORKINGFILE"
 echo "[*]"
 echo "[*] Finished file is $WORKINGFILE ... copy this into place as a .htaccess .."
 
