@@ -34,7 +34,7 @@ help () {
         echo "  -u USERAGENTS (add single or multiple user agents in regex format in quotes, \"^.*SomeScrapingBot.*$\")"
 	echo "		Note: UserAgents can be added to the static variable \$DEFAULTAGENTS, and if this command"
 	echo "		line is used any specified user agents will be added to the \$AGENTS variable."
-	echo "  -e ExtraIPs-or-Nets (add single or multiple ips or nets in quotes, \"127.0.0.1,10.6.5.0/24\".)"
+	echo "  -e ExtraIPs-or-Nets (add single or multiple ips or nets in quotes, \"MISC-127.0.0.1 MISC-10.6.5.0/24\".)"
 	echo "		Note: These can be added statically as MISC sources in the code." 
 	echo "	-o OutputFile (lets you set the path/name of the output, or it will default to /tmp/redhtaccess)"
 	echo "  -v VERBOSE MODE (adds more info about behind the scenes/deduping)"
