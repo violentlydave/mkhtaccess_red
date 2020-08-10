@@ -36,7 +36,7 @@ Command line arguments: [you have to use one option, even just -v or -z, otherwi
 -u USERAGENTS (add single or multiple user agents in regex format in quotes, "^.*SomeScrapingBot.*$")
    Note: UserAgents can be added to the static variable $DEFAULTAGENTS, and if this command
    line is used any specified user agents will be added to the $AGENTS variable.
--e ExtraIPs-or-Nets (add single or multiple ips or nets in quotes, "127.0.0.1,10.6.5.0/24".)
+-e ExtraIPs-or-Nets (add single or multiple ips or nets in quotes, "MISC-127.0.0.1 MISC-10.6.5.0/24".)
    Note: These can be added statically as MISC sources in the code.
 -o OUTPUT (lets you set the path/name of the output, or it will default to /tmp/redhtaccess)
 -v VERBOSE MODE (adds more info about behind the scenes/deduping)
