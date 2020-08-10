@@ -2,7 +2,7 @@
 
 Sandboxing makes phishing/infection hard.  If a target can hand off your payload to a third party to "detonate", how can you get them to run your payload?!  Simple:  by handing sandboxes innocuous payloads to detonate.
 
-How do we do that?  By dynamically creating and deduping a list based on:
+How do we do that?  By dynamically creating and deduping a list (Apache .htaccess) based on:
 - Sandbox/Security company networks by ASN
 - Current Tor Exit Nodes
 - Cloud Provider networks (AWS, GCP, Azure, IBM, etc)
