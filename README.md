@@ -54,4 +54,5 @@ Example:
    AllowOverride All
 </Directory>  
 ```
+
 If you need to debug how it is matching, add "LogLevel alert rewrite:trace6" to your main configuration -- but keep in mind that each connection attempt will log EACH regex to your logs. ***This can fill logs/drives quickly if many attempts occur!***
