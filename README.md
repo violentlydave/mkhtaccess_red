@@ -17,6 +17,8 @@ Thanks to:
 - **aconite33** for adding Cisco ScanSafe data
 - **Jacqueline**, because.. well, she deals w/ me
 
+If it has to be said, ***THIS SOFTWARE IS FOR LEGAL/APPROVED OFFENSIVE SECURITY OPERATIONS ONLY. ***
+
 -------------------------------------
 ### Usage
 ```
